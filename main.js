@@ -102,6 +102,7 @@ const CartItems = sequelize.define(
     },
     itemID: {
       type: Sequelize.STRING,
+      unique: true,
     },
     price: {
       type: Sequelize.DECIMAL,
@@ -513,32 +514,22 @@ app.get("/keyword", function (req, res) {
   );
 });
 app.get("/getSliderImages", function (req, res) {
-  fs.readFile(
-    __dirname + "/" + "slider.json",
-    "utf8",
-    function (err, data) {
-      console.log(data);
-      res.send(data); // you can also use res.send()
-    }
-  );
+  fs.readFile(__dirname + "/" + "slider.json", "utf8", function (err, data) {
+    console.log(data);
+    res.send(data); // you can also use res.send()
+  });
 });
 
 app.get("/keyword", function (req, res) {
-  fs.readFile(
-    __dirname + "/" + "slider.js",
-    "utf8",
-    function (err, data) {
-      data = JSON.parse(data);
-      console.log(data.tour);
-      const result = data.tour.filter(function (obj) {
-        return obj["id"]
-          .toLowerCase()
-          .includes(req.query.i.toLowerCase());
-      });
-      console.log(result);
-      res.send(result); // you can also use res.send()
-    }
-  );
+  fs.readFile(__dirname + "/" + "slider.js", "utf8", function (err, data) {
+    data = JSON.parse(data);
+    console.log(data.tour);
+    const result = data.tour.filter(function (obj) {
+      return obj["id"].toLowerCase().includes(req.query.i.toLowerCase());
+    });
+    console.log(result);
+    res.send(result); // you can also use res.send()
+  });
 });
 
 app.get("/store/item-page/:pageName", async (req, res) => {
@@ -660,19 +651,9 @@ app.post("/api/cart", async (req, res) => {
 
     // Map over the array of items and create a new array of objects to be inserted into the database
     const cartItems = items.map((item) => {
-      // Check if the item already exists in the database
-      const exists = existingItems.some(
-        (existingItem) => existingItem.itemID === item.id
-      );
-
-      // If the item already exists in the database, skip it
-      if (exists) {
-        return null;
-      }
-
       return {
         cartQuantity: item.cartQuantity,
-        itemID: item.id, // Use the 'id' property as the 'itemID'
+        itemID: item.id,
         price: item.price,
         star: item.star,
         text: item.text,
@@ -682,11 +663,13 @@ app.post("/api/cart", async (req, res) => {
       };
     });
 
-    // Filter out any null values
-    const filteredCartItems = cartItems.filter((item) => item !== null);
-
-    // Insert the array of objects into the database
-    await CartItems.bulkCreate(filteredCartItems);
+    await Promise.all(
+      cartItems.map((item) =>
+        CartItems.upsert(item, {
+          where: { userID: userID, itemID: item.itemID },
+        })
+      )
+    );
 
     res.status(200).send("Items successfully saved to the database");
   } catch (error) {
